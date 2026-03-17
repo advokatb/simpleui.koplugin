@@ -11,7 +11,6 @@ local FrameContainer  = require("ui/widget/container/framecontainer")
 local Geom            = require("ui/geometry")
 local GestureRange    = require("ui/gesturerange")
 local HorizontalGroup  = require("ui/widget/horizontalgroup")
-local RightContainer   = require("ui/widget/container/rightcontainer")
 local HorizontalSpan  = require("ui/widget/horizontalspan")
 local InputContainer  = require("ui/widget/container/inputcontainer")
 local LineWidget      = require("ui/widget/linewidget")
@@ -39,14 +38,15 @@ local _CLR_TEXT_PCT = Blitbuffer.COLOR_BLACK
 -- All pixel constants computed once at load time.
 local ROW_FS      = Screen:scaleBySize(11)    -- label / pct font size
 local SUB_FS      = Screen:scaleBySize(10)    -- detail text font size
-local ROW_H       = Screen:scaleBySize(20)    -- height of the top bar row (label+bar+pct)
+local ROW_H       = Screen:scaleBySize(16)    -- height of the top bar row (label+bar+pct)
 local SUB_H       = Screen:scaleBySize(16)    -- height of the detail text row below
 local SUB_GAP     = Screen:scaleBySize(2)     -- gap between bar row and detail row
-local ROW_GAP     = Screen:scaleBySize(10)    -- gap between annual and daily goals
+local ROW_GAP     = Screen:scaleBySize(18)    -- gap between annual and daily goals
 local BAR_H       = Screen:scaleBySize(7)     -- progress bar thickness
 local LBL_W       = Screen:scaleBySize(44)    -- fixed width reserved for the label column
 local COL_GAP     = Screen:scaleBySize(8)     -- base gap unit
-local GOAL_ROW_H  = ROW_H + SUB_GAP + SUB_H  -- total height of one goal block
+local BOT_PAD     = Screen:scaleBySize(18)     -- padding below detail text
+local GOAL_ROW_H  = ROW_H + SUB_GAP + SUB_H + BOT_PAD  -- total height of one goal block
 
 -- Total module height: LABEL_H already added by _buildContent above each module.
 -- This is the height of the rows themselves.
@@ -178,14 +178,6 @@ local function buildGoalRow(inner_w, label_str, pct, pct_str, detail_str, on_tap
     local bar_w       = math.max(Screen:scaleBySize(40),
                             inner_w - LBL_W - COL_GAP - BAR_PCT_GAP - PCT_W)
 
-    local function vcenter(child, col_w)
-        local LeftContainer = require("ui/widget/container/leftcontainer")
-        return LeftContainer:new{
-            dimen = Geom:new{ w = col_w, h = ROW_H },
-            child,
-        }
-    end
-
     local lbl_widget = TextWidget:new{
         text    = label_str,
         face    = Font:getFace("smallinfofont", ROW_FS),
@@ -205,16 +197,16 @@ local function buildGoalRow(inner_w, label_str, pct, pct_str, detail_str, on_tap
         alignment = "right",
     }
 
+    -- Simple left-to-right layout. bar_w is sized so the columns sum to inner_w:
+    --   LBL_W + COL_GAP + bar_w + BAR_PCT_GAP + PCT_W = inner_w
+    -- Pure arithmetic — no alignment containers, no overlap possible.
     local top_row = HorizontalGroup:new{
         align = "center",
-        vcenter(lbl_widget, LBL_W),
+        lbl_widget,
         HorizontalSpan:new{ width = COL_GAP },
-        vcenter(bar_widget, bar_w),
+        bar_widget,
         HorizontalSpan:new{ width = BAR_PCT_GAP },
-        RightContainer:new{
-            dimen = Geom:new{ w = PCT_W, h = ROW_H },
-            pct_widget,
-        },
+        pct_widget,
     }
 
     local detail_widget = TextWidget:new{
@@ -232,8 +224,9 @@ local function buildGoalRow(inner_w, label_str, pct, pct_str, detail_str, on_tap
     }
 
     local frame = FrameContainer:new{
-        bordersize = 0, padding = 0,
-        dimen      = Geom:new{ w = inner_w, h = GOAL_ROW_H },
+        bordersize     = 0,
+        padding        = 0,
+        padding_bottom = Screen:scaleBySize(6),
         block,
     }
 

@@ -325,16 +325,10 @@ function M.apply(fm_self)
 
             local fc = fm_self.file_chooser
             if fc then
-                local BD        = require("ui/bidi")
-                local ICON_HOME = "home"
-                local ICON_UP   = BD.mirroredUILayout() and "chevron.right" or "chevron.left"
+                local BD      = require("ui/bidi")
+                local ICON_UP = BD.mirroredUILayout() and "chevron.right" or "chevron.left"
 
                 fm_self._titlebar_orig_fc_genItemTable = fc.genItemTable
-                -- Capture the original home callback once — not re-read in the hot path.
-                local home_cb = (fc.title_bar and fc.title_bar.left_icon_tap_callback)
-                             or lb.callback
-                             or function() end
-                fm_self._titlebar_orig_lb_tap_cb = home_cb
 
                 -- fold_up_cb is built lazily the first time is_sub is true, then
                 -- reused — avoids allocating a new closure on every folder change.
@@ -356,15 +350,20 @@ function M.apply(fm_self)
                     if tb2 and tb2.left_button then
                         local btn = tb2.left_button
                         if is_sub then
+                            -- In a subfolder: show the back button.
                             btn:setIcon(ICON_UP)
                             if not fold_up_cb then
                                 fold_up_cb = function() fc_self:onFolderUp() end
                             end
-                            btn.callback = fold_up_cb
+                            btn.callback      = fold_up_cb
+                            btn.overlap_offset = { _buttonX(slot_map["up_button"].side, slot_map["up_button"].slot, iw, pad, gap, sw), 0 }
                         else
-                            btn:setIcon(ICON_HOME)
-                            btn.callback = home_cb
+                            -- At root: hide the button by moving it off-screen.
+                            btn.overlap_offset = { sw + 100, 0 }
+                            btn.callback       = function() end
+                            btn.hold_callback  = function() end
                         end
+                        UIManager:setDirty(tb2.show_parent or fm_self, "ui", tb2.dimen)
                     end
                     return filtered
                 end
@@ -405,7 +404,6 @@ function M.restore(fm_self)
         fc.genItemTable = fm_self._titlebar_orig_fc_genItemTable
     end
     fm_self._titlebar_orig_fc_genItemTable = nil
-    fm_self._titlebar_orig_lb_tap_cb       = nil
 
     if fm_self._titlebar_orig_title_set and tb.setTitle then
         tb:setTitle("")

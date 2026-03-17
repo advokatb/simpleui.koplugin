@@ -369,11 +369,16 @@ function M.onTabTap(plugin, action_id, fm_self)
     local already_active = (plugin.active_action == action_id)
 
     plugin.active_action = action_id
-    -- "homescreen" skips the eager replaceBar here: UIManager.show will call
-    -- setActiveAndRefreshFM when the HS widget is shown, which rebuilds the FM
-    -- bar at that point. Doing it twice produces a redundant buildBarWidget call
-    -- and extra setDirty flushes with no visible benefit.
-    if fm_self._navbar_container and action_id ~= "homescreen" then
+    -- Skip the eager replaceBar when the homescreen is open: navigate() will
+    -- close the HS and call replaceBar+setDirty itself, so doing it here too
+    -- produces a redundant buildBarWidget call and extra repaint flushes.
+    -- Also skip for "homescreen": UIManager.show calls setActiveAndRefreshFM
+    -- when the HS widget is shown, covering the bar update at that point.
+    local hs_open = (function()
+        local HS = package.loaded["homescreen"]
+        return HS and HS._instance ~= nil
+    end)()
+    if fm_self._navbar_container and action_id ~= "homescreen" and not hs_open then
         M.replaceBar(fm_self, M.buildBarWidget(action_id, tabs), tabs)
         UIManager:setDirty(fm_self._navbar_container, "ui")
         UIManager:setDirty(fm_self, "ui")
@@ -546,21 +551,9 @@ function M.navigate(plugin, action_id, fm_self, tabs, force)
     end
 
     if hs_open then
-        -- Navigate the FM while it's still covered by the HS.
-        if action_id == "home" then
-            if fm.file_chooser then
-                _goHome(fm)
-            else
-                -- file_chooser not yet created (FM is still initializing
-                -- after being rebuilt post-reader). The HS close below will
-                -- trigger a repaint that wakes the UIManager, so scheduleIn(0)
-                -- will run in the very next event cycle.
-                UIManager:scheduleIn(0, function()
-                    _goHome(plugin.ui)
-                end)
-            end
-        end
-        -- Close the HS before navigating to a new screen.
+        -- Close the HS first — the FM is invisible underneath so there is no
+        -- benefit to navigating it before the close. Doing navigation after
+        -- avoids a redundant FM repaint while it is still covered by the HS.
         local hs_inst = HS._instance
         hs_inst._navbar_closing_intentionally = true
         pcall(function() UIManager:close(hs_inst) end)
@@ -570,8 +563,19 @@ function M.navigate(plugin, action_id, fm_self, tabs, force)
             M.replaceBar(fm, M.buildBarWidget(action_id, tabs), tabs)
             UIManager:setDirty(fm, "ui")
         end
-        -- For "home" we're done — FM is already at the right path.
-        if action_id == "home" then return end
+        -- For "home": navigate the FM to home_dir now that the HS is gone.
+        -- A single setDirty from replaceBar above covers the repaint.
+        if action_id == "home" then
+            if fm.file_chooser then
+                _goHome(fm)
+            else
+                -- file_chooser not yet created — schedule for next event cycle.
+                UIManager:scheduleIn(0, function()
+                    _goHome(plugin.ui)
+                end)
+            end
+            return
+        end
         -- For other actions, fall through with fm_self = fm.
         fm_self = fm
     end
@@ -895,13 +899,18 @@ function M.showPowerDialog(plugin)
     if plugin._power_dialog then return end  -- guard: ignore double-tap
     local ButtonDialog = require("ui/widget/buttondialog")
     local dialog_w = math.floor(Screen:getWidth() * 0.42)
-    -- tap_close_callback fires when the user taps outside the dialog or presses
-    -- the physical Back key (via ButtonDialog:onClose). Without it, plugin._power_dialog
-    -- would never be cleared and the guard above would block all future opens.
+    -- _clear is the single point of cleanup for plugin._power_dialog.
+    -- It is called from onCloseWidget (fires on every close path, including
+    -- programmatic UIManager:close() calls) so the guard is always released
+    -- regardless of how the dialog disappears.
     local function _clear() plugin._power_dialog = nil end
     plugin._power_dialog = ButtonDialog:new{
         width = dialog_w,
+        -- tap_close_callback covers taps outside the dialog and the physical
+        -- Back key via ButtonDialog:onClose. onCloseWidget below covers all
+        -- remaining paths (programmatic close, stack teardown, etc.).
         tap_close_callback = _clear,
+        onCloseWidget      = _clear,
         buttons = {
             {{ text = _("Restart"), callback = function()
                 local d = plugin._power_dialog
