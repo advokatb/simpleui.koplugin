@@ -361,6 +361,10 @@ function M.build(w, ctx)
 
     local bar_style = getBarStyle(pfx)
 
+    -- Flag to ensure the compact stats row is rendered only once,
+    -- at the position of the first visible stats element in the Arrange order.
+    local _compact_stats_rendered = false
+
     -- Adds a vertical gap before the next element, but not before the first one.
     local meta_has_content = false
     local function gap_before(size)
@@ -458,63 +462,59 @@ function M.build(w, ctx)
                 end
             end
 
-        elseif elem == "book_days" and (show.days or show.time or show.remain)
+        elseif (elem == "book_days" or elem == "book_time" or elem == "book_remaining")
                and getStatsStyle(pfx) == "compact" then
-            -- Compact mode: single row "4h 18m · 3h 13m · 3 days · ~21:00"
-            -- Fires at the position of "book_days" in the user-configured order;
-            -- book_time and book_remaining are skipped below when compact is active.
+            -- Compact mode: single row following the Arrange Items order.
+            -- Fires on the first visible stats element encountered; the others are
+            -- consumed here so they don't produce a second row when the loop reaches them.
+            if not _compact_stats_rendered then
+                _compact_stats_rendered = true
 
-            -- Compute secs_left once (shared by "remain" item and ETA).
-            local secs_left
-            local avg_t = (bstats and bstats.avg_time and bstats.avg_time > 0)
-                          and bstats.avg_time or bd.avg_time
-            if avg_t and avg_t > 0 and bd.pages and bd.pages > 0 then
-                local pages_left = bd.pages * (1 - (bd.percent or 0))
-                local sl = math.floor(avg_t * pages_left)
-                if sl > 0 then secs_left = sl end
-            end
+                -- Compute secs_left once (shared by "remain" and ETA).
+                local secs_left
+                local avg_t = (bstats and bstats.avg_time and bstats.avg_time > 0)
+                              and bstats.avg_time or bd.avg_time
+                if avg_t and avg_t > 0 and bd.pages and bd.pages > 0 then
+                    local pages_left = bd.pages * (1 - (bd.percent or 0))
+                    local sl = math.floor(avg_t * pages_left)
+                    if sl > 0 then secs_left = sl end
+                end
 
-            local parts = {}
-            if show.time and bstats and bstats.total_secs > 0 then
-                parts[#parts+1] = string.format(_("%s read"), fmtTime(bstats.total_secs))
-            end
-            if show.remain and secs_left then
-                parts[#parts+1] = string.format(_("%s left"), fmtTime(secs_left))
-            end
-            if show.days and bstats and bstats.days > 0 then
-                parts[#parts+1] = bstats.days == 1
-                    and _("1 day")
-                    or  string.format(_("%d days"), bstats.days)
-            end
-            if secs_left then
-                local eta_t = os.date("*t", os.time() + secs_left)
-                parts[#parts+1] = string.format(_("~%d:%02d"), eta_t.hour, eta_t.min)
-            end
+                -- Build parts in Arrange Items order, walking the full element order.
+                local parts = {}
+                for _i, e in ipairs(_getElemOrder(pfx)) do
+                    if e == "book_time" and show.time and bstats and bstats.total_secs > 0 then
+                        parts[#parts+1] = string.format(_("%s read"), fmtTime(bstats.total_secs))
+                    elseif e == "book_remaining" and show.remain and secs_left then
+                        parts[#parts+1] = string.format(_("%s left"), fmtTime(secs_left))
+                    elseif e == "book_days" and show.days and bstats and bstats.days > 0 then
+                        parts[#parts+1] = bstats.days == 1
+                            and _("1 day of reading")
+                            or  string.format(_("%d days of reading"), bstats.days)
+                    end
+                end
 
-            if #parts > 0 then
-                gap_before(pct_gap)
-                local stats_row = HorizontalGroup:new{ align = "center" }
-                for i, part in ipairs(parts) do
-                    if i > 1 then
+                if #parts > 0 then
+                    gap_before(pct_gap)
+                    local stats_row = HorizontalGroup:new{ align = "center" }
+                    for i, part in ipairs(parts) do
+                        if i > 1 then
+                            stats_row[#stats_row+1] = TextWidget:new{
+                                text    = " · ",
+                                face    = face_s,
+                                fgcolor = CLR_TEXT_SUB,
+                            }
+                        end
                         stats_row[#stats_row+1] = TextWidget:new{
-                            text    = " · ",
+                            text    = part,
                             face    = face_s,
                             fgcolor = CLR_TEXT_SUB,
                         }
                     end
-                    stats_row[#stats_row+1] = TextWidget:new{
-                        text    = part,
-                        face    = face_s,
-                        fgcolor = CLR_TEXT_SUB,
-                    }
+                    meta[#meta+1] = stats_row
+                    meta_has_content = true
                 end
-                meta[#meta+1] = stats_row
-                meta_has_content = true
             end
-
-        elseif (elem == "book_time" or elem == "book_remaining")
-               and getStatsStyle(pfx) == "compact" then
-            -- Skipped in compact mode: rendered inside the book_days row above.
         end
     end
 
