@@ -68,7 +68,7 @@ msgstr "%s de lecture"
 
 #: desktop_modules/module_currently.lua:370
 msgid "%s remaining"
-msgstr "%s restant"
+msgstr "%s restantes"
 
 #: desktop_modules/module_currently.lua:335
 msgid "1 day of reading"
@@ -1581,7 +1581,7 @@ msgstr "Temps restant"
 
 #: desktop_modules/module_currently.lua
 msgid "%s left"
-msgstr "%s restant"
+msgstr "%s restantes"
 
 #: desktop_modules/module_currently.lua
 msgid "1 day"
