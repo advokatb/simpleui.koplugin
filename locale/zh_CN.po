@@ -1240,6 +1240,10 @@ msgstr "设置"
 msgid "Show Battery"
 msgstr "显示电池"
 
+#: desktop_modules/module_clock.lua:454
+msgid "Show Clock"
+msgstr "显示时钟"
+
 #: desktop_modules/module_clock.lua:378
 msgid "Show Date"
 msgstr "显示日期"
