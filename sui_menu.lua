@@ -9,7 +9,6 @@ local Screen    = Device.screen
 local lfs       = require("libs/libkoreader-lfs")
 local logger    = require("logger")
 local _         = require("gettext")
-local N_        = _.ngettext
 
 -- Heavy UI widgets — lazy-loaded on first use so that require("menu") at boot
 -- does not pull them into memory before the user ever opens the settings menu.
@@ -269,8 +268,7 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
                     else
                         if #tabs >= limit then
                             UIManager:show(InfoMessage():new{
-                                text = string.format(N_("The maximum of %d tab has been reached. Remove one first.",
-                                       "The maximum of %d tabs has been reached. Remove one first.", limit), limit), timeout = 2,
+                                text = string.format(_("Maximum %d tabs reached. Remove one first."), limit), timeout = 2,
                             })
                             return
                         end
@@ -1228,13 +1226,13 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
         local ButtonDialog = require("ui/widget/buttondialog")
         local dlg
         dlg = ButtonDialog:new{ title = _("Annual Reading Goal"), buttons = {
-            {{ text = goal > 0 and string.format(N_("Digital: %d book in %s", "Digital: %d books in %s", goal), goal, os.date("%Y")) or string.format(_("Digital Goal  (%s)"), os.date("%Y")),
+            {{ text = goal > 0 and string.format(_("Digital: %d books in %s"), goal, os.date("%Y")) or string.format(_("Digital Goal  (%s)"), os.date("%Y")),
                callback = function()
                    UIManager:close(dlg)
                    local ok_rg, RG = pcall(require, "readinggoals")
                    if ok_rg and RG then RG.showAnnualGoalDialog(function() refreshHomescreen() end) end
                end }},
-            {{ text = string.format(N_("Physical: %d book in %s", "Physical: %d books in %s", physical), physical, os.date("%Y")),
+            {{ text = string.format(_("Physical: %d books in %s"), physical, os.date("%Y")),
                callback = function()
                    UIManager:close(dlg)
                    local ok_rg, RG = pcall(require, "readinggoals")
@@ -1298,8 +1296,7 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
             for _i, v in ipairs(items) do if v == id then found = true else new_items[#new_items+1] = v end end
             if not found then
                 if #items >= MAX_QA_ITEMS then
-                    UIManager:show(InfoMessage():new{ text = string.format(N_("The maximum of %d action per module has been reached. Remove one first.",
-                              "The maximum of %d actions per module has been reached. Remove one first.", MAX_QA_ITEMS), MAX_QA_ITEMS), timeout = 2 })
+                    UIManager:show(InfoMessage():new{ text = string.format(_("Maximum %d actions per module reached. Remove one first."), MAX_QA_ITEMS), timeout = 2 })
                     return
                 end
                 new_items[#new_items+1] = id
@@ -1501,7 +1498,76 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
                                     cancel_text   = T("Cancel"),
                                     default_value = 1,
                                     callback = function(spin)
-                                        G_reader_settings:saveSetting(ctx.pfx .. "homescreen_num_pages", spin.value)
+                                        local new_pages = spin.value
+                                        G_reader_settings:saveSetting(ctx.pfx .. "homescreen_num_pages", new_pages)
+
+                                        -- Re-read the current order (captured above may be stale if
+                                        -- another operation ran before the SpinWidget closed).
+                                        local cur_order = G_reader_settings:readSetting(ctx.pfx .. "module_order") or {}
+
+                                        -- Split cur_order into pages so we know which modules live
+                                        -- on pages that are being removed.
+                                        local pages_by_id = {}
+                                        local cur_pg = {}
+                                        for _i2, k in ipairs(cur_order) do
+                                            if k == PAGE_BREAK then
+                                                pages_by_id[#pages_by_id + 1] = cur_pg
+                                                cur_pg = {}
+                                            else
+                                                cur_pg[#cur_pg + 1] = k
+                                            end
+                                        end
+                                        pages_by_id[#pages_by_id + 1] = cur_pg
+
+                                        -- Disable modules that live on pages beyond new_pages.
+                                        local Registry = require("desktop_modules/moduleregistry")
+                                        for pg_idx = new_pages + 1, #pages_by_id do
+                                            for _i2, mod_id in ipairs(pages_by_id[pg_idx]) do
+                                                local mod = Registry.get(mod_id)
+                                                if mod then
+                                                    if type(mod.setEnabled) == "function" then
+                                                        mod.setEnabled(ctx.pfx, false)
+                                                    elseif mod.enabled_key then
+                                                        G_reader_settings:saveSetting(ctx.pfx .. mod.enabled_key, false)
+                                                    end
+                                                end
+                                            end
+                                        end
+
+                                        -- Rebuild module_order with exactly (new_pages - 1) PAGE_BREAKs,
+                                        -- keeping only the modules from pages 1..new_pages, then
+                                        -- appending disabled/tail modules (no breaks after them).
+                                        local new_order = {}
+                                        local tail = {}
+                                        for pg_idx, pg_ids in ipairs(pages_by_id) do
+                                            if pg_idx <= new_pages then
+                                                -- Insert separator before page 2, 3, … (not before page 1).
+                                                if pg_idx > 1 then
+                                                    new_order[#new_order + 1] = PAGE_BREAK
+                                                end
+                                                for _i2, k in ipairs(pg_ids) do
+                                                    new_order[#new_order + 1] = k
+                                                end
+                                            else
+                                                -- Modules on removed pages go to the tail (disabled above).
+                                                for _i2, k in ipairs(pg_ids) do
+                                                    tail[#tail + 1] = k
+                                                end
+                                            end
+                                        end
+                                        for _i2, k in ipairs(tail) do
+                                            new_order[#new_order + 1] = k
+                                        end
+                                        G_reader_settings:saveSetting(ctx.pfx .. "module_order", new_order)
+
+                                        -- Reset to page 1 if the current page no longer exists.
+                                        local HS2 = package.loaded["sui_homescreen"]
+                                        if HS2 and HS2._instance then
+                                            if (HS2._instance._current_page or 1) > new_pages then
+                                                HS2._instance._current_page = 1
+                                            end
+                                        end
+
                                         ctx.refresh()
                                     end,
                                 })

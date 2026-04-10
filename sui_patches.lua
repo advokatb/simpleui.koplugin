@@ -166,7 +166,13 @@ function M.patchFileManagerClass(plugin)
                 local fm_ref = liveFM()
                 if fm_ref and fc_self.ui == fm_ref
                         and not fm_ref._navbar_suppress_path_change then
-                    fm_ref._sui_show_folder_pending = true
+                    -- Do not set the flag while a book is being opened;
+                    -- changeToPath can be triggered mid-open and would cause
+                    -- ReaderUI to get the "No reader engine" error.
+                    local RUI = package.loaded["apps/reader/readerui"]
+                    if not (RUI and RUI.instance) then
+                        fm_ref._sui_show_folder_pending = true
+                    end
                 end
                 return orig_fc_changeToPath(fc_self, path, focused_path)
             end
