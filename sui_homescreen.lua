@@ -839,7 +839,7 @@ function HomescreenWidget:init()
     end
     if Device:hasKeys() then
         self.key_events.HSOpenMenu   = { { "Menu"  } }
-        self.key_events.PrevPage     = { { Device.input.group.PgBwd } }
+        self.key_events.PrevPage     = { { Device.input.group.PgBack } }
         self.key_events.NextPage     = { { Device.input.group.PgFwd } }
     end
 
