@@ -1310,6 +1310,16 @@ function M.navigate(plugin, action_id, fm_self, tabs, force)
         if fm.collections then fm.collections:onShowCollList()
         else showUnavailable(_("Collections not available.")) end
 
+    elseif action_id == "authors" or action_id == "series" then
+        local ok_mb, MB = pcall(require, "sui_metabrowser")
+        if ok_mb and MB and type(MB.show) == "function" then
+            MB.show(fm, action_id)
+        else
+            showUnavailable(action_id == "authors"
+                and _("Authors not available.")
+                or _("Series not available."))
+        end
+
     elseif action_id == "history" then
         local ok = pcall(function() fm.history:onShowHist() end)
         if not ok then showUnavailable(_("History not available.")) end

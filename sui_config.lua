@@ -77,6 +77,8 @@ M.ICON = {
     -- Plugin icons
     library        = _P .. "library.svg",
     collections    = _P .. "collections.svg",
+    authors        = _P .. "authors.svg",
+    series         = _P .. "series.svg",
     history        = _P .. "history.svg",
     continue_      = _P .. "continue.svg",       -- trailing _ avoids clash with Lua keyword
     frontlight     = _P .. "frontlight.svg",
@@ -130,6 +132,8 @@ end
 M.ALL_ACTIONS = {
     { id = "home",             label = _("Library"),          icon = M.ICON.library     },
     { id = "homescreen",       label = _("Home"),             icon = M.ICON.ko_home     },
+    { id = "authors",          label = _("Authors"),          icon = M.ICON.authors     },
+    { id = "series",           label = _("Series"),           icon = M.ICON.series      },
     { id = "collections",      label = _("Collections"),      icon = M.ICON.collections },
     { id = "history",          label = _("History"),          icon = M.ICON.history     },
     { id = "continue",         label = _("Continue"),         icon = M.ICON.continue_   },

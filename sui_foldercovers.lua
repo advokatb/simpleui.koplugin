@@ -1296,8 +1296,8 @@ function M.install()
         local dir_path = self.entry and self.entry.path
         if not dir_path then return end
 
-        -- ── Series group cover: use first available book cover from the group ──
-        if self.entry.is_series_group then
+        -- ── Virtual metadata group cover: use first available book cover ──
+        if self.entry.is_series_group or self.entry.is_meta_group then
             if self._foldercover_processed then return end
 
             -- Check for a user-chosen cover override first.
@@ -1323,6 +1323,7 @@ function M.install()
 
             -- No override: use first available book cover from the group.
             local items = self.entry.series_items
+                or self.entry.meta_items
                 or _sg_items_cache[dir_path]
             if items then
                 for _, book_entry in ipairs(items) do
